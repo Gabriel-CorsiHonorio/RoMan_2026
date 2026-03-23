@@ -20,6 +20,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Int32
 from roman_msgs.msg import SamData, DataResults, Cmd1Data
+import roslibpy
 
 
 class ManagerNode(Node):
@@ -27,8 +28,16 @@ class ManagerNode(Node):
         super().__init__('manager_node')
         self.get_logger().info('Manager node started.')
 
+        self.client = roslibpy.Ros(host='localhost',port=9090)
+        self.client.run()
+
+        self.topic = roslibpy.Topic(self.client,'/command0','std_msgs/String')
+
+        self.listener = roslibpy.Topic(self.client, '/start_time_arm', 'std_msgs/Int32')
+
+        self.listener.subscribe(self._on_start_time_arm)
+
         # ── Publishers ────────────────────────────────────────────────────────
-        self.pub_command0    = self.create_publisher(String,      '/command0',    10)
         self.pub_command1    = self.create_publisher(Cmd1Data,      '/command1',    10)
         self.pub_data_results = self.create_publisher(DataResults, '/data_results', 10)
 
@@ -36,7 +45,7 @@ class ManagerNode(Node):
         self.create_subscription(SamData, '/sam_data',           self._on_sam_data,          10)
         self.create_subscription(Int32,   '/trigger',            self._on_trigger,           10)
         self.create_subscription(String,  '/result',             self._on_result,            10)
-        self.create_subscription(Int32,   '/start_time_arm',     self._on_start_time_arm,    10)
+        # self.create_subscription(Int32,   '/start_time_arm',     self._on_start_time_arm,    10)
         self.create_subscription(Int32,   '/start_time_speaker', self._on_start_time_speaker, 10)
 
         # ── Estado do trial atual ─────────────────────────────────────────────
@@ -94,14 +103,13 @@ class ManagerNode(Node):
             return
 
         # ── /command0 ──
+        command0_value : str = ''
         if self._suggestion:
             command0_value = self._ground_truth
         else:
             command0_value = self._opposite(self._ground_truth)
 
-        cmd0 = String()
-        cmd0.data = command0_value
-        self.pub_command0.publish(cmd0)
+        self.topic.publish(roslibpy.Message({'data':command0_value}))
         self.get_logger().info(f'Published /command0: {command0_value}')
 
         # ── /command1 (somente justification) ──

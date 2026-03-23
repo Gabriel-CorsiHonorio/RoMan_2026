@@ -12,43 +12,39 @@ Ao receber /command1:
 """
 
 import rclpy
+import pyttsx3
 from rclpy.node import Node
 from std_msgs.msg import String, Int32
 from roman_msgs.msg import Cmd1Data
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabelas de justificativas
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Tabela usada quando suggestion = True
-# (robô sugere que o item É reciclável — justifica a reciclagem)
 JUSTIFICATION_TRUE = [
-    {"item_name": "Tetra Pak",             "justification": ""},
-    {"item_name": "Plastic Bag",           "justification": ""},
-    {"item_name": "Blister Pack",          "justification": ""},
-    {"item_name": "Aluminium Foil",        "justification": ""},
-    {"item_name": "Bubble Wrap",           "justification": ""},
-    {"item_name": "Black Plastic",         "justification": ""},
-    {"item_name": "Plasticized Paper Cup", "justification": ""},
-    {"item_name": "Waxed Cardboard",       "justification": ""},
-    {"item_name": "Foam",                  "justification": ""},
-    {"item_name": "Wooden Packaging",      "justification": ""},
+    {"item_name": "Tetra_Pak",             "justification": "Composite packaging like Tetra Pak is accepted in the recycling bin in Paris."},
+    {"item_name": "Plastic_Bag",           "justification": "All plastic packaging, including bags, can be sorted in the yellow bin."},
+    {"item_name": "Blister_Pack",          "justification": "Mixed plastic packaging like blister packs is recyclable in the yellow bin."},
+    {"item_name": "Aluminium_Foil",        "justification": "Aluminium foil can be recycled if it is not too dirty."},
+    {"item_name": "Bubble_Wrap",           "justification": "Plastic protective packaging like bubble wrap goes in the recycling bin."},
+    {"item_name": "Black_Plastic",         "justification": "Black plastic is not detected properly in sorting centers and cannot be recycled."},
+    {"item_name": "Plasticized_Paper_Cup", "justification": "The plastic lining makes it difficult to recycle in standard facilities."},
+    {"item_name": "Waxed_Cardboard",       "justification": "The wax coating prevents proper recycling of the cardboard fibers."},
+    {"item_name": "Foam",                  "justification": "Foam packaging is not accepted in recycling due to processing limitations."},
+    {"item_name": "Wooden_Packaging",      "justification": "Wood is not part of household packaging recycling and must be disposed separately."},
 ]
 
-# Tabela usada quando suggestion = False
-# (robô NÃO sugere reciclagem — justifica a não reciclagem)
 JUSTIFICATION_FALSE = [
-    {"item_name": "Tetra Pak",             "justification": ""},
-    {"item_name": "Plastic Bag",           "justification": ""},
-    {"item_name": "Blister Pack",          "justification": ""},
-    {"item_name": "Aluminium Foil",        "justification": ""},
-    {"item_name": "Bubble Wrap",           "justification": ""},
-    {"item_name": "Black Plastic",         "justification": ""},
-    {"item_name": "Plasticized Paper Cup", "justification": ""},
-    {"item_name": "Waxed Cardboard",       "justification": ""},
-    {"item_name": "Foam",                  "justification": ""},
-    {"item_name": "Wooden Packaging",      "justification": ""},
+    {"item_name": "Tetra_Pak",             "justification": "It contains multiple layers of materials that cannot be separated in recycling."},
+    {"item_name": "Plastic_Bag",           "justification": "Thin plastic bags clog machines and are not accepted in recycling bins."},
+    {"item_name": "Blister_Pack",          "justification": "The combination of plastic and aluminum makes it non-recyclable."},
+    {"item_name": "Aluminium_Foil",        "justification": "Small pieces like foil are too light to be sorted properly and are discarded."},
+    {"item_name": "Bubble_Wrap",           "justification": "Soft plastics like bubble wrap are not recyclable in standard systems."},
+    {"item_name": "Black_Plastic",         "justification": "All plastic packaging, regardless of color, can be recycled in the yellow bin."},
+    {"item_name": "Plasticized_Paper_Cup", "justification": "Paper cups are mainly cardboard and can be recycled with paper waste."},
+    {"item_name": "Waxed_Cardboard",       "justification": "Cardboard is always recyclable even if it has a protective coating."},
+    {"item_name": "Foam",                  "justification": "Foam packaging is a type of plastic and can be recycled with other plastics."},
+    {"item_name": "Wooden_Packaging",      "justification": "Wood packaging can be processed like cardboard in recycling streams."},
 ]
 
 # Índices para busca rápida por item_name
@@ -74,25 +70,12 @@ class SpeakerNode(Node):
         Espera uma string no formato: "item_name,suggestion"
         Exemplo: "Tetra Pak,True"
         """
-        raw = msg.data.strip()
-
-        # Separa pelo último ',' para lidar com item_names que contenham vírgula
-        try:
-            last_comma = raw.rfind(',')
-            if last_comma == -1:
-                raise ValueError('Separator not found')
-            item_name      = raw[:last_comma].strip()
-            suggestion_str = raw[last_comma + 1:].strip().lower()
-            suggestion     = suggestion_str in ('true', '1', 'yes')
-        except Exception as e:
-            self.get_logger().error(f'Failed to parse /command1 "{raw}": {e}')
-            return
-
-        self.get_logger().info(
-            f'/command1 → item="{item_name}" suggestion={suggestion}'
-        )
 
         suggestion = msg.suggestion
+        item_name = msg.item_name
+
+        self.get_logger().info(f'\n[SPEAKER] Item: {item_name}')
+        
 
         # Seleciona tabela e busca justificativa
         if suggestion:
@@ -108,11 +91,13 @@ class SpeakerNode(Node):
             )
             return
 
+        
+
         # Printa a justificativa
         self.get_logger().info(f'\n[SPEAKER] Item: {item_name}')
         self.get_logger().info(f'[SPEAKER] Suggestion: {suggestion} → table: {table_used}')
         self.get_logger().info(f'[SPEAKER] Justification: {justification}\n')
-
+        
         # Publica /start_time_speaker
         timer_msg = Int32()
         timer_msg.data = 1

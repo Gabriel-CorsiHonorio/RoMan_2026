@@ -531,39 +531,16 @@ class ExperimentScreen(QWidget):
 
         just_grid = QGridLayout()
         just_grid.setSpacing(12)
-        for i in range(4):
+        for i in range(16):
             card = ItemCard(i)
             card.clicked.connect(self._on_card_clicked)
             self.cards.append(card)
-            just_grid.addWidget(card, i // 2, i % 2)
+            just_grid.addWidget(card, i // 8, i % 8)
         just_col.addLayout(just_grid)
 
-        # Divisor vertical
-        vline = QFrame()
-        vline.setFrameShape(QFrame.VLine)
-        vline.setStyleSheet(f"background: {BORDER_COLOR}; border: none; max-width: 1px;")
-
-        # Coluna: No Justification
-        no_just_col = QVBoxLayout()
-        no_just_col.setSpacing(12)
-        nj_title = QLabel("NO JUSTIFICATION")
-        nj_title.setFont(QFont("Courier New", 13, QFont.Bold))
-        nj_title.setAlignment(Qt.AlignCenter)
-        nj_title.setStyleSheet(f"color: #E67E22; letter-spacing: 3px;")
-        no_just_col.addWidget(nj_title)
-
-        nj_grid = QGridLayout()
-        nj_grid.setSpacing(12)
-        for i in range(4):
-            card = ItemCard(i + 4)
-            card.clicked.connect(self._on_card_clicked)
-            self.cards.append(card)
-            nj_grid.addWidget(card, i // 2, i % 2)
-        no_just_col.addLayout(nj_grid)
 
         grid_container.addLayout(just_col)
-        grid_container.addWidget(vline)
-        grid_container.addLayout(no_just_col)
+
 
         # ── Feedback bar ──
         self.feedback_lbl = QLabel("")

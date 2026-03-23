@@ -23,34 +23,34 @@ from roman_msgs.msg import ExpData
 # Tabela de itens
 # ─────────────────────────────────────────────────────────────────────────────
 
-RECYCLABLE_ITEMS = [
+recycle_ITEMS = [
     # Easy
-    {"item_name": "Plastic Bottle",  "ground_truth": "recyclable", "difficulty": "easy"},
-    {"item_name": "Metal Can",       "ground_truth": "recyclable", "difficulty": "easy"},
-    {"item_name": "Cardboard Box",   "ground_truth": "recyclable", "difficulty": "easy"},
-    {"item_name": "Paper Sheet",     "ground_truth": "recyclable", "difficulty": "easy"},
-    {"item_name": "Glass Bottle",    "ground_truth": "recyclable", "difficulty": "easy"},
+    {"item_name": "Plastic_Bottle",  "ground_truth": "recycle", "difficulty": "easy"},
+    {"item_name": "Metal_Can",       "ground_truth": "recycle", "difficulty": "easy"},
+    {"item_name": "Cardboard_Box",   "ground_truth": "recycle", "difficulty": "easy"},
+    {"item_name": "Paper_Sheet",     "ground_truth": "recycle", "difficulty": "easy"},
+    {"item_name": "Glass_Bottle",    "ground_truth": "recycle", "difficulty": "easy"},
     # Hard
-    {"item_name": "Tetra Pak",       "ground_truth": "recyclable", "difficulty": "hard"},
-    {"item_name": "Plastic Bag",     "ground_truth": "recyclable", "difficulty": "hard"},
-    {"item_name": "Blister Pack",    "ground_truth": "recyclable", "difficulty": "hard"},
-    {"item_name": "Aluminium Foil",  "ground_truth": "recyclable", "difficulty": "hard"},
-    {"item_name": "Bubble Wrap",     "ground_truth": "recyclable", "difficulty": "hard"},
+    {"item_name": "Tetra_Pak",       "ground_truth": "recycle", "difficulty": "hard"},
+    {"item_name": "Plastic_Bag",     "ground_truth": "recycle", "difficulty": "hard"},
+    {"item_name": "Blister_Pack",    "ground_truth": "recycle", "difficulty": "hard"},
+    {"item_name": "Aluminium_Foil",  "ground_truth": "recycle", "difficulty": "hard"},
+    {"item_name": "Bubble_Wrap",     "ground_truth": "recycle", "difficulty": "hard"},
 ]
 
-NON_RECYCLABLE_ITEMS = [
+NON_recycle_ITEMS = [
     # Easy
-    {"item_name": "Paper Towel",     "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Used Tissue",     "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Surgical Mask",   "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Food Waste",      "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Broken Ceramic",  "ground_truth": "waste", "difficulty": "easy"},
+    {"item_name": "Paper_Towel",     "ground_truth": "waste", "difficulty": "easy"},
+    {"item_name": "Used_Tissue",     "ground_truth": "waste", "difficulty": "easy"},
+    {"item_name": "Surgical_Mask",   "ground_truth": "waste", "difficulty": "easy"},
+    {"item_name": "Food_Waste",      "ground_truth": "waste", "difficulty": "easy"},
+    {"item_name": "Broken_Ceramic",  "ground_truth": "waste", "difficulty": "easy"},
     # Hard
-    {"item_name": "Black Plastic",         "ground_truth": "waste", "difficulty": "hard"},
-    {"item_name": "Plasticized Paper Cup", "ground_truth": "waste", "difficulty": "hard"},
-    {"item_name": "Waxed Cardboard",       "ground_truth": "waste", "difficulty": "hard"},
+    {"item_name": "Black_Plastic",         "ground_truth": "waste", "difficulty": "hard"},
+    {"item_name": "Plasticized_Paper_Cup", "ground_truth": "waste", "difficulty": "hard"},
+    {"item_name": "Waxed_Cardboard",       "ground_truth": "waste", "difficulty": "hard"},
     {"item_name": "Foam",                  "ground_truth": "waste", "difficulty": "hard"},
-    {"item_name": "Wooden Packaging",      "ground_truth": "waste", "difficulty": "hard"},
+    {"item_name": "Wooden_Packaging",      "ground_truth": "waste", "difficulty": "hard"},
 ]
 
 
@@ -63,18 +63,18 @@ def sample_experiment() -> list[dict]:
     def balanced_sample(pool: list[dict]) -> list[dict]:
         easy = [i for i in pool if i["difficulty"] == "easy"]
         hard = [i for i in pool if i["difficulty"] == "hard"]
-        selected = random.sample(easy, 2) + random.sample(hard, 2)
+        selected = random.sample(easy, 4) + random.sample(hard, 4)
         random.shuffle(selected)
         return selected
 
-    recyclable_group     = balanced_sample(RECYCLABLE_ITEMS)
-    non_recyclable_group = balanced_sample(NON_RECYCLABLE_ITEMS)
+    recycle_group     = balanced_sample(recycle_ITEMS)
+    non_recycle_group = balanced_sample(NON_recycle_ITEMS)
 
     experiment = []
-    for idx, item in enumerate(recyclable_group):
+    for idx, item in enumerate(recycle_group):
         experiment.append({**item, "box_index": idx})        # 0–3
-    for idx, item in enumerate(non_recyclable_group):
-        experiment.append({**item, "box_index": idx + 4})    # 4–7
+    for idx, item in enumerate(non_recycle_group):
+        experiment.append({**item, "box_index": idx + 8})    # 4–7
 
     return experiment
 
