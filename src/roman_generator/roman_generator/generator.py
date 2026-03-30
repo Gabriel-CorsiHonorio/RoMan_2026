@@ -25,57 +25,87 @@ from roman_msgs.msg import ExpData
 
 recycle_ITEMS = [
     # Easy
-    {"item_name": "Plastic_Bottle",  "ground_truth": "recycle", "difficulty": "easy"},
-    {"item_name": "Metal_Can",       "ground_truth": "recycle", "difficulty": "easy"},
-    {"item_name": "Cardboard_Box",   "ground_truth": "recycle", "difficulty": "easy"},
-    {"item_name": "Paper_Sheet",     "ground_truth": "recycle", "difficulty": "easy"},
-    {"item_name": "Glass_Bottle",    "ground_truth": "recycle", "difficulty": "easy"},
+    {"item_name": "Plastic_Bottle",  "ground_truth": "recycle", "difficulty": "easy", "classification": ""},
+    {"item_name": "Metal_Can",       "ground_truth": "recycle", "difficulty": "easy", "classification": ""},
+    {"item_name": "Cardboard_Box",   "ground_truth": "recycle", "difficulty": "easy", "classification": ""},
+    {"item_name": "Paper_Sheet",     "ground_truth": "recycle", "difficulty": "easy", "classification": ""},
+    #{"item_name": "Glass_Bottle",    "ground_truth": "recycle", "difficulty": "easy", "classification": ""},
     # Hard
-    {"item_name": "Tetra_Pak",       "ground_truth": "recycle", "difficulty": "hard"},
-    {"item_name": "Plastic_Bag",     "ground_truth": "recycle", "difficulty": "hard"},
-    {"item_name": "Blister_Pack",    "ground_truth": "recycle", "difficulty": "hard"},
-    {"item_name": "Aluminium_Foil",  "ground_truth": "recycle", "difficulty": "hard"},
-    {"item_name": "Bubble_Wrap",     "ground_truth": "recycle", "difficulty": "hard"},
+    {"item_name": "Tetra_Pak",       "ground_truth": "recycle", "difficulty": "hard", "classification": ""},
+    {"item_name": "Plastic_Bag",     "ground_truth": "recycle", "difficulty": "hard", "classification": ""},
+    {"item_name": "Blister_Pack",    "ground_truth": "recycle", "difficulty": "hard", "classification": ""},
+    #{"item_name": "Aluminium_Foil",  "ground_truth": "recycle", "difficulty": "hard", "classification": ""},
+    {"item_name": "Bubble_Wrap",     "ground_truth": "recycle", "difficulty": "hard", "classification": ""},
 ]
 
 NON_recycle_ITEMS = [
     # Easy
-    {"item_name": "Paper_Towel",     "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Used_Tissue",     "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Surgical_Mask",   "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Food_Waste",      "ground_truth": "waste", "difficulty": "easy"},
-    {"item_name": "Broken_Ceramic",  "ground_truth": "waste", "difficulty": "easy"},
+    {"item_name": "Paper_Towel",     "ground_truth": "waste", "difficulty": "easy", "classification": ""},
+    {"item_name": "Used_Tissue",     "ground_truth": "waste", "difficulty": "easy", "classification": ""},
+    {"item_name": "Surgical_Mask",   "ground_truth": "waste", "difficulty": "easy", "classification": ""},
+    #{"item_name": "Food_Waste",      "ground_truth": "waste", "difficulty": "easy", "classification": ""},
+    {"item_name": "Broken_Ceramic",  "ground_truth": "waste", "difficulty": "easy", "classification": ""},
     # Hard
-    {"item_name": "Black_Plastic",         "ground_truth": "waste", "difficulty": "hard"},
-    {"item_name": "Plasticized_Paper_Cup", "ground_truth": "waste", "difficulty": "hard"},
-    {"item_name": "Waxed_Cardboard",       "ground_truth": "waste", "difficulty": "hard"},
-    {"item_name": "Foam",                  "ground_truth": "waste", "difficulty": "hard"},
-    {"item_name": "Wooden_Packaging",      "ground_truth": "waste", "difficulty": "hard"},
+    {"item_name": "Black_Plastic",         "ground_truth": "waste", "difficulty": "hard", "classification": ""},
+    {"item_name": "Plasticized_Paper_Cup", "ground_truth": "waste", "difficulty": "hard", "classification": ""},
+    {"item_name": "Waxed_Cardboard",       "ground_truth": "waste", "difficulty": "hard", "classification": ""},
+    {"item_name": "Foam",                  "ground_truth": "waste", "difficulty": "hard", "classification": ""},
+    #{"item_name": "Wooden_Packaging",      "ground_truth": "waste", "difficulty": "hard", "classification": ""},
 ]
 
 
 def sample_experiment() -> list[dict]:
     """
-    Seleciona 8 itens balanceados:
-      - 4 recicláveis    (2 easy + 2 hard) → box_index 0–3
-      - 4 não recicláveis (2 easy + 2 hard) → box_index 4–7
+    16 unique items split into 2 blocks of 8.
+
+    Each block:
+      - 4 easy + 4 hard
+      - shuffled
+      - 2 random positions marked as incorrect
     """
-    def balanced_sample(pool: list[dict]) -> list[dict]:
-        easy = [i for i in pool if i["difficulty"] == "easy"]
-        hard = [i for i in pool if i["difficulty"] == "hard"]
-        selected = random.sample(easy, 4) + random.sample(hard, 4)
-        random.shuffle(selected)
-        return selected
 
-    recycle_group     = balanced_sample(recycle_ITEMS)
-    non_recycle_group = balanced_sample(NON_recycle_ITEMS)
+    all_items = recycle_ITEMS + NON_recycle_ITEMS
 
-    experiment = []
-    for idx, item in enumerate(recycle_group):
-        experiment.append({**item, "box_index": idx})        # 0–3
-    for idx, item in enumerate(non_recycle_group):
-        experiment.append({**item, "box_index": idx + 8})    # 4–7
+    # --- Step 1: split pools
+    easy_pool = [i for i in all_items if i["difficulty"] == "easy"]
+    hard_pool = [i for i in all_items if i["difficulty"] == "hard"]
 
+    # --- Step 2: sample WITHOUT repetition
+    selected_easy = random.sample(easy_pool, 8)
+    selected_hard = random.sample(hard_pool, 8)
+
+    # --- Step 3: create blocks
+    block1 = selected_easy[:4] + selected_hard[:4]
+    block2 = selected_easy[4:] + selected_hard[4:]
+
+    def build_block(items: list[dict]) -> list[dict]:
+        # shuffle items
+        random.shuffle(items)
+
+        # pick 2 random positions for errors
+        error_positions = set(random.sample(range(8), 2))
+
+        # assign correctness directly by position
+        block = []
+        for idx, item in enumerate(items):
+            block.append({
+                **item,
+                "suggestion": idx not in error_positions
+            })
+
+        return block
+
+    # --- Step 4: build experiment
+    experiment = build_block(block1) + build_block(block2)
+
+    # --- Step 5: assign box_index
+    for idx, item in enumerate(experiment):
+        item["box_index"] = idx
+        if idx < 8:
+            item['classification'] = "no_justification"
+        else:
+            item["classification"] = "justification"
+       
     return experiment
 
 
@@ -120,8 +150,8 @@ class GeneratorNode(Node):
         msg.ground_truth = item['ground_truth']
         msg.difficulty   = item['difficulty']
         msg.box_index    = item['box_index']
-        msg.classification = 'justification'
-        msg.suggestion = True
+        msg.classification = item['classification']
+        msg.suggestion = item['suggestion']
 
         self.pub_exp.publish(msg)
         self.get_logger().info(

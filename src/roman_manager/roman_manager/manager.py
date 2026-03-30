@@ -45,7 +45,6 @@ class ManagerNode(Node):
         self.create_subscription(SamData, '/sam_data',           self._on_sam_data,          10)
         self.create_subscription(Int32,   '/trigger',            self._on_trigger,           10)
         self.create_subscription(String,  '/result',             self._on_result,            10)
-        # self.create_subscription(Int32,   '/start_time_arm',     self._on_start_time_arm,    10)
         self.create_subscription(Int32,   '/start_time_speaker', self._on_start_time_speaker, 10)
 
         # ── Estado do trial atual ─────────────────────────────────────────────
@@ -113,14 +112,15 @@ class ManagerNode(Node):
         self.get_logger().info(f'Published /command0: {command0_value}')
 
         # ── /command1 (somente justification) ──
-        if self._classification == 'justification':
-            cmd1 = Cmd1Data()
-            cmd1.item_name = self._item_name
-            cmd1.suggestion = self._suggestion
-            self.pub_command1.publish(cmd1)
-            self.get_logger().info(
-                f'Published /command1: item_name={self._item_name} suggestion={self._suggestion}'
-            )
+
+        cmd1 = Cmd1Data()
+        cmd1.item_name = self._item_name
+        cmd1.suggestion = self._suggestion
+        cmd1.classification = self._classification
+        self.pub_command1.publish(cmd1)
+        self.get_logger().info(
+            f'Published /command1: item_name={self._item_name} suggestion={self._suggestion}'
+        )
 
     def _on_start_time_arm(self, msg: Int32):
         """Inicia o contador de tempo do braço."""

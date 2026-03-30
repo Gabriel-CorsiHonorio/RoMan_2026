@@ -16,42 +16,15 @@ import pyttsx3
 from rclpy.node import Node
 from std_msgs.msg import String, Int32
 from roman_msgs.msg import Cmd1Data
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Tabelas de justificativas
-# ─────────────────────────────────────────────────────────────────────────────
-
-JUSTIFICATION_TRUE = [
-    {"item_name": "Tetra_Pak",             "justification": "Composite packaging like Tetra Pak is accepted in the recycling bin in Paris."},
-    {"item_name": "Plastic_Bag",           "justification": "All plastic packaging, including bags, can be sorted in the yellow bin."},
-    {"item_name": "Blister_Pack",          "justification": "Mixed plastic packaging like blister packs is recyclable in the yellow bin."},
-    {"item_name": "Aluminium_Foil",        "justification": "Aluminium foil can be recycled if it is not too dirty."},
-    {"item_name": "Bubble_Wrap",           "justification": "Plastic protective packaging like bubble wrap goes in the recycling bin."},
-    {"item_name": "Black_Plastic",         "justification": "Black plastic is not detected properly in sorting centers and cannot be recycled."},
-    {"item_name": "Plasticized_Paper_Cup", "justification": "The plastic lining makes it difficult to recycle in standard facilities."},
-    {"item_name": "Waxed_Cardboard",       "justification": "The wax coating prevents proper recycling of the cardboard fibers."},
-    {"item_name": "Foam",                  "justification": "Foam packaging is not accepted in recycling due to processing limitations."},
-    {"item_name": "Wooden_Packaging",      "justification": "Wood is not part of household packaging recycling and must be disposed separately."},
-]
-
-JUSTIFICATION_FALSE = [
-    {"item_name": "Tetra_Pak",             "justification": "It contains multiple layers of materials that cannot be separated in recycling."},
-    {"item_name": "Plastic_Bag",           "justification": "Thin plastic bags clog machines and are not accepted in recycling bins."},
-    {"item_name": "Blister_Pack",          "justification": "The combination of plastic and aluminum makes it non-recyclable."},
-    {"item_name": "Aluminium_Foil",        "justification": "Small pieces like foil are too light to be sorted properly and are discarded."},
-    {"item_name": "Bubble_Wrap",           "justification": "Soft plastics like bubble wrap are not recyclable in standard systems."},
-    {"item_name": "Black_Plastic",         "justification": "All plastic packaging, regardless of color, can be recycled in the yellow bin."},
-    {"item_name": "Plasticized_Paper_Cup", "justification": "Paper cups are mainly cardboard and can be recycled with paper waste."},
-    {"item_name": "Waxed_Cardboard",       "justification": "Cardboard is always recyclable even if it has a protective coating."},
-    {"item_name": "Foam",                  "justification": "Foam packaging is a type of plastic and can be recycled with other plastics."},
-    {"item_name": "Wooden_Packaging",      "justification": "Wood packaging can be processed like cardboard in recycling streams."},
-]
-
-# Índices para busca rápida por item_name
-_INDEX_TRUE  = {e["item_name"]: e["justification"] for e in JUSTIFICATION_TRUE}
-_INDEX_FALSE = {e["item_name"]: e["justification"] for e in JUSTIFICATION_FALSE}
+import os
+import subprocess
+import sys
+import argparse
 
 
+
+OUTPUT_DIR = "tts_output"
+CONDITIONS = ["no_justification", "justification_true", "justification_false"]
 # ─────────────────────────────────────────────────────────────────────────────
 # Nó
 # ─────────────────────────────────────────────────────────────────────────────
@@ -73,36 +46,70 @@ class SpeakerNode(Node):
 
         suggestion = msg.suggestion
         item_name = msg.item_name
+        classification = msg.classification
 
         self.get_logger().info(f'\n[SPEAKER] Item: {item_name}')
         
-
-        # Seleciona tabela e busca justificativa
-        if suggestion:
-            justification = _INDEX_TRUE.get(item_name)
-            table_used = 'justification_true'
-        else:
-            justification = _INDEX_FALSE.get(item_name)
-            table_used = 'justification_false'
-
-        if justification is None:
-            self.get_logger().warn(
-                f'Item "{item_name}" not found in {table_used}.'
-            )
-            return
-
         
-
         # Printa a justificativa
         self.get_logger().info(f'\n[SPEAKER] Item: {item_name}')
-        self.get_logger().info(f'[SPEAKER] Suggestion: {suggestion} → table: {table_used}')
-        self.get_logger().info(f'[SPEAKER] Justification: {justification}\n')
+
+
+        self.handler_speaker(item_name=item_name, suggestion=suggestion, classification=classification)
         
         # Publica /start_time_speaker
         timer_msg = Int32()
         timer_msg.data = 1
         self.pub_start_time_speaker.publish(timer_msg)
         self.get_logger().info('Published /start_time_speaker: 1')
+
+    def find_wav(self, base_dir: str, item_name: str, condition: str) -> str | None:
+        """Return the WAV path if it exists, else None."""
+        self.path_wav = os.path.join(base_dir, condition, f"{item_name}.wav")
+        self.get_logger().info(f'Path {self.path_wav}')
+
+
+    def play_wav(self, path: str) -> None:
+        subprocess.run(
+            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path],
+            check=True
+        )
+
+
+    def handler_speaker(self, item_name: str, suggestion: bool,  classification: str):
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--dir", default=OUTPUT_DIR,
+                            help=f"Base tts_output directory (default: {OUTPUT_DIR})")
+        args = parser.parse_args()
+        base_dir = args.dir
+
+        print(f"WAV Player — reads from '{base_dir}/'")
+
+        if classification == 'no_justification':
+
+            if suggestion:
+                condition = 'no_justification_true'
+
+            else:
+                condition = 'no_justification_false'
+
+        else:
+
+            if suggestion:
+                condition = 'justification_true'
+
+            else:
+                condition = 'justification_false'
+
+        self.find_wav(base_dir, item_name, condition)
+        print(f"  ▶ [{condition}] {item_name}.wav")
+        if self.path_wav is None:
+            self.get_logger().error(f"WAV file not found for {item_name} in {condition}")
+            return
+
+        self.play_wav(self.path_wav)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

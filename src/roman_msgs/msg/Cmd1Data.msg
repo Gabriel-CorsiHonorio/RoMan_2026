@@ -4,4 +4,5 @@
 
 string item_name
 bool suggestion # false or true
+string classification
 
