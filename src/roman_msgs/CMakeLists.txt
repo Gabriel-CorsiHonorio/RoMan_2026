@@ -13,7 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ExpData.msg"
   "msg/SamData.msg"
   "msg/DataResults.msg"
-  "msg/Cmd1Data.msg"
+  "msg/SpeakerData.msg"
   "msg/CandidateData.msg"
   
   DEPENDENCIES std_msgs

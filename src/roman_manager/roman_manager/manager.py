@@ -1,186 +1,113 @@
 #!/usr/bin/env python3
-"""
-manager.py — RoMan Manager Node
-=================================
-Subscreve:
-  /sam_data         (roman_msgs/SamData)   → salva dados do item selecionado
-  /trigger          (std_msgs/Int32)        → publica comandos ao robô
-  /result           (std_msgs/String)       → para timers e publica /data_results
-  /start_time_arm   (std_msgs/Int32)        → inicia contador time_arm
-  /start_time_speaker (std_msgs/Int32)      → inicia contador time_speaker
-
-Publica:
-  /command0         (std_msgs/String)       → ação principal do robô
-  /command1         (std_msgs/String)       → comando secundário (item + suggestion)
-  /data_results     (roman_msgs/DataResults) → dados completos do trial
-"""
 
 import time
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Int32
-from roman_msgs.msg import SamData, DataResults, Cmd1Data
-import roslibpy
+from roman_msgs.msg import SpeakerData
+from enum import Enum
 
+class States(Enum):
+    WAITING_FOR_VOICE_COMMAND = 1
+    WAITING_FOR_POSITION = 2
+    WAITING_FOR_TAKED = 3
+    WAITING_FOR_GPT_RESPONSE = 4
+    WAITING_FOR_SPEAKER = 5
+    WAITING_FOR_FINISHED = 6
 
 class ManagerNode(Node):
     def __init__(self):
         super().__init__('manager_node')
         self.get_logger().info('Manager node started.')
 
-        self.client = roslibpy.Ros(host='localhost',port=9090)
-        self.client.run()
-
-        self.topic = roslibpy.Topic(self.client,'/command0','std_msgs/String')
-
-        self.listener = roslibpy.Topic(self.client, '/start_time_arm', 'std_msgs/Int32')
-
-        self.listener.subscribe(self._on_start_time_arm)
-
         # ── Publishers ────────────────────────────────────────────────────────
-        self.pub_command1    = self.create_publisher(Cmd1Data,      '/command1',    10)
-        self.pub_data_results = self.create_publisher(DataResults, '/data_results', 10)
-
+        self.pub_trigger_gpt  = self.create_publisher(Int32,      '/trigger_gpt',    10)
+        self.pub_trigger_arm_cam = self.create_publisher(String,      '/get_obj_pos', 10)
+        self.pub_speakersay     = self.create_publisher(String, '/speakersay',     10)
+        self.pub_command0 = self.create_publisher(String,      '/command1',       10)
+        self.pub_nao_recyclable = self.create_publisher(String,      '/recyclable', 10)
+        self.pub_nao_non_recyclable = self.create_publisher(String,      '/non_recyclable', 10)
         # ── Subscribers ───────────────────────────────────────────────────────
-        self.create_subscription(SamData, '/sam_data',           self._on_sam_data,          10)
-        self.create_subscription(Int32,   '/trigger',            self._on_trigger,           10)
-        self.create_subscription(String,  '/result',             self._on_result,            10)
-        self.create_subscription(Int32,   '/start_time_speaker', self._on_start_time_speaker, 10)
-
-        # ── Estado do trial atual ─────────────────────────────────────────────
-        self._reset_trial()
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Helpers
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def _reset_trial(self):
-        """Zera o estado para o próximo item."""
-        self._item_name      : str  = ''
-        self._difficulty     : str  = ''
-        self._ground_truth   : str  = ''
-        self._suggestion     : bool = True
-        self._classification : str  = ''
-        self._result         : str  = ''
-
-        # Timers: None = ainda não iniciado
-        self._t_arm_start     : float | None = None
-        self._t_speaker_start : float | None = None
-        self._time_arm        : float = 0.0
-        self._time_speaker    : float = 0.0
-
-    def _opposite(self, ground_truth: str) -> str:
-        """Retorna o oposto de ground_truth."""
-        return 'waste' if ground_truth == 'recycle' else 'recycle'
-
+        self.create_subscription(String, '/command1',           self._on_command0,          10)
+        self.create_subscription(Int32, '/trigger_mic',           self._on_trigger_mic,          10)
+        self.create_subscription(String, '/gpt_response',         self._on_gpt_response,       10)
+        self.create_subscription(Int32, '/speaker_finish', self._on_speaker_finish,     10)
+        self.create_subscription(String, '/state',            self._on_state,              10)
+        self.create_subscription(String, '/trash_class',       self._on_trash_class,              10)  # Reuse state callback for trash_class updates
+        # Initial state
+        self.state = States.WAITING_FOR_VOICE_COMMAND
+        self.get_logger().info(f'[MANAGER] Initial state: {self.state.name}')
+    
+        self.gpt_response = None
+        self.trash_class = None
     # ─────────────────────────────────────────────────────────────────────────
     # Callbacks
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _on_sam_data(self, msg: SamData):
-        """Salva os dados do item selecionado pelo participante."""
-        self._item_name      = msg.item_name
-        self._difficulty     = msg.difficulty
-        self._ground_truth   = msg.ground_truth
-        self._suggestion     = msg.suggestion
-        self._classification = msg.classification
-        self.get_logger().info(
-            f'/sam_data received → item={self._item_name} '
-            f'gt={self._ground_truth} suggestion={self._suggestion} '
-            f'classification={self._classification}'
-        )
+    def _on_trigger_mic(self, msg: Int32):
+        self.get_logger().info(f'[MANAGER] Received trigger mic: {msg.data}')
+        if self.state == States.WAITING_FOR_VOICE_COMMAND:
+            self.get_logger().info(f'[MANAGER] Publishing to /command1 and /trigger_gpt')
+            self.pub_command0.publish(String(data='position'))
+            self.pub_trigger_gpt.publish(Int32(data=1))
+            self.get_logger().info(f'[MANAGER] Transitioning to WAITING_FOR_POSITION')
+            self.state = States.WAITING_FOR_POSITION
 
-    def _on_trigger(self, msg: Int32):
-        """
-        Ao receber /trigger:
-          - Publica /command0 com ground_truth (se suggestion) ou oposto
-          - Se classification==justification e ground_truth==recycle:
-              publica /command1 com item_name e suggestion
-        """
-        if not self._item_name:
-            self.get_logger().warn('/trigger received but no sam_data stored yet — ignoring.')
-            return
+    def _on_command0(self, msg: String):
+        self.get_logger().info(f'[MANAGER] Received command0: {msg.data}')
+        if self.state == States.WAITING_FOR_POSITION and msg.data == "trash":
+            self.pub_nao_recyclable.publish(String(data="Let me see what trash item you put here!"))
+            self.pub_trigger_arm_cam.publish(String(data=''))
+            self.get_logger().info(f'[MANAGER] Transitioning to WAITING_FOR_TAKED')
+            self.state = States.WAITING_FOR_TAKED
 
-        # ── /command0 ──
-        command0_value : str = ''
-        if self._suggestion:
-            command0_value = self._ground_truth
-        else:
-            command0_value = self._opposite(self._ground_truth)
+    def _on_state(self, msg: String):
+        self.get_logger().info(f'[MANAGER] Received state: {msg.data}')
+        if self.state == States.WAITING_FOR_TAKED and msg.data == "taked":
+            self.get_logger().info(f'[MANAGER] Transitioning to WAITING_FOR_GPT_RESPONSE')
+            if self.gpt_response is not None:
+                self.pub_speakersay.publish(String(data=self.gpt_response))
+                if self.trash_class == "recyclable":
+                    self.get_logger().info(f'[MANAGER] Publishing recyclable response to /nao_recyclable')
+                    self.pub_nao_recyclable.publish(String(data=self.gpt_response))
+                elif self.trash_class == "non-recyclable":
+                    self.get_logger().info(f'[MANAGER] Publishing non-recyclable response to /nao_non_recyclable')
+                    self.pub_nao_non_recyclable.publish(String(data=self.gpt_response))
+                self.gpt_response = None
+                self.state = States.WAITING_FOR_SPEAKER
+                self.get_logger().info(f'[MANAGER] Published GPT response to /speakersay and transitioning to WAITING_FOR_SPEAKER')
+            else:
+                self.get_logger().warn(f'[MANAGER] GPT response is None, cannot publish to /speakersay')
+                self.get_logger().info(f'[MANAGER] Transitioning to WAITING_FOR_SPEAKER without publishing GPT response')
+                self.state = States.WAITING_FOR_GPT_RESPONSE
+        elif self.state == States.WAITING_FOR_FINISHED and msg.data == "finished":
+            self.get_logger().info(f'[MANAGER] Transitioning to WAITING_FOR_VOICE_COMMAND')
+            self.state = States.WAITING_FOR_VOICE_COMMAND
 
-        self.topic.publish(roslibpy.Message({'data':command0_value}))
-        self.get_logger().info(f'Published /command0: {command0_value}')
+    def _on_gpt_response(self, msg: String):
+        self.get_logger().info(f'[MANAGER] Received GPT response: {msg.data}')
+        self.gpt_response = msg.data
+        if self.state == States.WAITING_FOR_GPT_RESPONSE:
+            self.pub_speakersay.publish(String(data=self.gpt_response))
+            if self.trash_class == "recyclable":
+                self.get_logger().info(f'[MANAGER] Publishing recyclable response to /nao_recyclable')
+                self.pub_nao_recyclable.publish(String(data=self.gpt_response))
+            elif self.trash_class == "non-recyclable":
+                self.get_logger().info(f'[MANAGER] Publishing non-recyclable response to /nao_non_recyclable')
+                self.pub_nao_non_recyclable.publish(String(data=self.gpt_response))
+            self.gpt_response = None
+            self.get_logger().info(f'[MANAGER] Transitioning to WAITING_FOR_SPEAKER')
+            self.state = States.WAITING_FOR_SPEAKER
 
-        # ── /command1 (somente justification) ──
+    def _on_trash_class(self, msg: String):
+        self.get_logger().info(f'[MANAGER] Received trash class: {msg.data}')
+        self.trash_class = msg.data
 
-        cmd1 = Cmd1Data()
-        cmd1.item_name = self._item_name
-        cmd1.suggestion = self._suggestion
-        cmd1.classification = self._classification
-        self.pub_command1.publish(cmd1)
-        self.get_logger().info(
-            f'Published /command1: item_name={self._item_name} suggestion={self._suggestion}'
-        )
-
-    def _on_start_time_arm(self, msg: Int32):
-        """Inicia o contador de tempo do braço."""
-        self._t_arm_start = time.monotonic()
-        self.get_logger().info('Timer arm started.')
-
-    def _on_start_time_speaker(self, msg: Int32):
-        """Inicia o contador de tempo do speaker."""
-        self._t_speaker_start = time.monotonic()
-        self.get_logger().info('Timer speaker started.')
-
-    def _on_result(self, msg: String):
-        """
-        Para os timers, monta o DataResults e publica em /data_results.
-        Zera as variáveis de tempo para não contaminar o próximo trial.
-        """
-        now = time.monotonic()
-
-        # Para e calcula time_arm
-        if self._t_arm_start is not None:
-            self._time_arm = now - self._t_arm_start
-        else:
-            self._time_arm = 0.0   # timer nunca foi iniciado neste trial
-
-        # Para e calcula time_speaker
-        if self._t_speaker_start is not None:
-            self._time_speaker = now - self._t_speaker_start
-        else:
-            self._time_speaker = 0.0
-
-        self._result = msg.data
-
-        self.get_logger().info(
-            f'/result received → result={self._result} '
-            f'time_arm={self._time_arm:.3f}s '
-            f'time_speaker={self._time_speaker:.3f}s'
-        )
-
-        # ── Publica dados completos ──
-        data = DataResults()
-        data.item_name      = self._item_name
-        data.difficulty     = self._difficulty
-        data.ground_truth   = self._ground_truth
-        data.suggestion     = self._suggestion
-        data.classification = self._classification
-        data.time_arm       = self._time_arm
-        data.time_speaker   = self._time_speaker
-        data.result         = self._result
-
-        self.pub_data_results.publish(data)
-        self.get_logger().info(f'Published /data_results for item: {self._item_name}')
-
-        # ── Zera APENAS os tempos para o próximo trial ──
-        # (os dados do item serão sobrescritos pelo próximo /sam_data)
-        self._t_arm_start     = None
-        self._t_speaker_start = None
-        self._time_arm        = 0.0
-        self._time_speaker    = 0.0
-
-
+    def _on_speaker_finish(self, msg: Int32):
+        self.get_logger().info(f'[MANAGER] Received speaker finish: {msg.data}')
+        if self.state == States.WAITING_FOR_SPEAKER:
+            self.get_logger().info(f'[MANAGER] Transitioning to WAITING_45')
+            self.state = States.WAITING_FOR_VOICE_COMMAND
 # ─────────────────────────────────────────────────────────────────────────────
 # Entrypoint
 # ─────────────────────────────────────────────────────────────────────────────
